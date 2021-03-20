@@ -20,6 +20,23 @@ use glauber::{color, graphio, simsvm, Scanner, SummaryStats};
 ///
 /// Computes the number of colors used with a greedy coloring scheme
 /// with a max-degree sorting.
+///
+/// Saves the sampled Glauber colorings as a plain ascii text row of integers
+/// with the first number in the row being the current step count.
+/// I.e., the `out` file will look like:
+///
+/// ```
+/// 0 0 1 2 3 4
+/// 100 3 2 1 3 4
+/// 200 3 2 2 2 4
+/// ```
+///
+/// where the above corresponds to vertices `0-4` being initialized with colors
+/// `0-4` at step 0, respectively, then changing colors for steps `100` and `200`.
+///
+/// `out_times` the contains a single line of the elapsed seconds corresponding
+/// to each row of the `out` file, i.e., `0.0\n23.1\n46.5\n` would be viable for the above
+/// example.
 #[derive(Debug, StructOpt)]
 #[structopt(name = "color", about = "Sample a uniform graph coloring.")]
 struct Opt {
@@ -30,7 +47,18 @@ struct Opt {
     /// Total number of Glauber samples.
     #[structopt(long)]
     nsamples: usize,
-    // TODO total nsamples, sample frequnecy, and logfiles for saved color schemes
+
+    /// Number of steps to take between coloring observations
+    #[structopt(long)]
+    frequency: usize,
+
+    /// Out file for captured colorings
+    #[structopt(long)]
+    out: PathBuf,
+
+    /// Out file for the time elapsed at each sample.
+    #[structopt(long)]
+    out_times: PathBuf,
 }
 
 fn main() {
@@ -65,7 +93,14 @@ fn main() {
     let ncolors = 2 * max_degree + 1;
     let ncolors: u32 = ncolors.try_into().unwrap();
     let colors_start = Instant::now();
-    let colors = color::glauber(&graph, ncolors, opt.nsamples);
+    let colors = color::glauber(
+        &graph,
+        ncolors,
+        opt.nsamples,
+        opt.frequency,
+        &opt.out,
+        &opt.out_times,
+    );
     let remap = color::remap(ncolors, &colors);
     println!(
         "{}",

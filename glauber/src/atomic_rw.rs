@@ -79,6 +79,10 @@ impl Rwu32 {
             State::RunlockedWunlocked => from_payload(prev),
         }
     }
+
+    pub fn mut_read(&mut self) -> u32 {
+        from_payload(*self.inner.get_mut())
+    }
 }
 
 fn to_payload(v: u32) -> u64 {

@@ -15,11 +15,10 @@ Run with `--help` for details.
 | `cargo run sample` | sample a low-average-degree graph |
 | `cargo run color` | color a graph, emit diagnostics |
 
-pull out code from chromatic-encoding -- cp crank entirely
-create graph files (start with connected graph, then sprinkle in random edges) w/ prescribed degree -- sample uniformly “in the triangle” remaining to create edges.
-add ‘recording every k steps’ functionality
-compare to serial
-
+```
+cargo run --example sample -- --out test --degree 5 --nvertices 100 --seed 1234
+cargo run --example color -- --graph test.0 --nsamples 1000000 --frequency 100000 --out colors.txt --out-times times.txt 
+```
 
 eval: use the same starting point intentionally, then ask what’s the earthmover distance (allowing arbitrary color permutation) between the starting point and the final point: if it’s truly random then the distance will increase: average distance is quality.
 solve via assignment problem

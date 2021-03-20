@@ -1,10 +1,16 @@
 //! The core coloring functionality, including Glauber dynamics simulation.
 
+use std::convert::TryInto;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Instant;
 
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
 use serde_json::json;
 
 use crate::{
@@ -107,7 +113,15 @@ pub fn greedy(graph: &Graph) -> (u32, Vec<u32>) {
 }
 
 /// Return Glauber coloring after this many samples.
-pub fn glauber(graph: &Graph, ncolors: u32, nsamples: usize) -> Vec<u32> {
+/// Log out the intermediate colorings every `frequency` samples, along with the elapsed time.
+pub fn glauber(
+    graph: &Graph,
+    ncolors: u32,
+    nsamples: usize,
+    frequency: usize,
+    out: &Path,
+    out_times: &Path,
+) -> Vec<u32> {
     let (greedy_ncolors, colors) = greedy(graph);
     assert!(
         greedy_ncolors <= ncolors,
@@ -121,39 +135,53 @@ pub fn glauber(graph: &Graph, ncolors: u32, nsamples: usize) -> Vec<u32> {
     // run glauber markov chain on a coloring
     // chain sampling can be parallel with some simple conflict detection
 
-    let colors = colors.into_iter().map(Rwu32::new).collect::<Vec<_>>();
+    let mut colors = colors.into_iter().map(Rwu32::new).collect::<Vec<_>>();
     let nthreads = rayon::current_num_threads() as usize;
 
-    let glauber_start = Instant::now();
-    let conflicts = (0..nthreads)
-        .into_par_iter()
-        .map(|i| {
-            let nsamples = (nsamples + nthreads - 1) / nthreads;
-            let mut rng = Lcg64Xsh32::new(0xcafef00dd15ea5e5, i as u64);
-            let mut conflicts = 0;
-            let mut viable_colors = DiscreteSampler::new(ncolors);
-            let mut neighbor_guards = Vec::new();
+    let mut logger = GlauberLogger::new(out, out_times);
+    // contains f64 elapsed seconds, init to 0
+    // contains usize steps, init to 0
+    logger.log(&mut colors);
 
-            for _ in 0..nsamples {
-                loop {
-                    let successful = try_mcmc_update(
-                        &mut rng,
-                        &colors,
-                        &graph,
-                        &mut viable_colors,
-                        &mut neighbor_guards,
-                    );
-                    neighbor_guards.clear();
-                    if successful.is_some() {
-                        break;
+    let mut conflicts: usize = 0;
+    let mut samples_left_this_round = AtomicI64::new(0);
+    let mut thread_states: Vec<_> = (0..nthreads)
+        .map(|i| SamplerThreadState::new(i, ncolors))
+        .collect();
+    while logger.steps < nsamples.try_into().unwrap() {
+        let samples_to_sample = frequency.min(nsamples - logger.steps as usize);
+        *samples_left_this_round.get_mut() = samples_to_sample.try_into().unwrap();
+        logger.start();
+        conflicts += thread_states
+            .par_iter_mut()
+            .map(|state| {
+                // thread state, map over this, init'd outside of loop
+                let mut neighbor_guards = Vec::new();
+
+                let mut conflicts = 0;
+
+                while samples_left_this_round.fetch_sub(1, Ordering::Relaxed) > 0 {
+                    loop {
+                        let successful = try_mcmc_update(
+                            &mut state.rng,
+                            &colors,
+                            &graph,
+                            &mut state.viable_colors,
+                            &mut neighbor_guards,
+                        );
+                        neighbor_guards.clear();
+                        if successful.is_some() {
+                            break;
+                        }
+                        conflicts += 1;
                     }
-                    conflicts += 1;
                 }
-            }
-            conflicts
-        })
-        .sum::<usize>();
-    let glauber_time = Instant::now().duration_since(glauber_start);
+                conflicts
+            })
+            .sum::<usize>();
+        logger.stop(samples_to_sample.try_into().unwrap());
+        logger.log(&mut colors);
+    }
 
     let colors = colors.into_iter().map(|x| x.into_inner()).collect();
 
@@ -166,7 +194,6 @@ pub fn glauber(graph: &Graph, ncolors: u32, nsamples: usize) -> Vec<u32> {
             "conflicts": conflicts,
             "nthreads": nthreads,
             "conflict_percent": 100.0 * conflicts as f64 / (nsamples + conflicts) as f64,
-            "glauber_time": format!("{:.0?}", glauber_time),
         })
     );
 
@@ -256,5 +283,66 @@ impl DiscreteSampler {
 
     fn nalive(&self) -> usize {
         self.alive_set.len()
+    }
+}
+
+/// See examples/color.rs for an explanation of the logging format.
+struct GlauberLogger {
+    steps: u64,
+    elapsed_seconds: f64,
+    start_time: Option<Instant>,
+    time_file: BufWriter<File>,
+    color_file: BufWriter<File>,
+}
+
+impl GlauberLogger {
+    fn new(out_colors: &Path, out_times: &Path) -> Self {
+        let file = File::create(out_colors).expect("write file");
+        let mut color_file = BufWriter::new(file);
+        let file = File::create(out_times).expect("write file");
+        let mut time_file = BufWriter::new(file);
+        Self {
+            steps: 0,
+            elapsed_seconds: 0.0,
+            start_time: None,
+            time_file,
+            color_file,
+        }
+    }
+
+    fn start(&mut self) {
+        assert!(self.start_time.is_none());
+        self.start_time = Some(Instant::now());
+    }
+
+    fn stop(&mut self, samples: u64) {
+        let start_time = self.start_time.expect("started clock");
+        let delta_seconds = Instant::now().duration_since(start_time);
+        self.elapsed_seconds += delta_seconds.as_secs_f64();
+        self.steps += samples;
+        self.start_time = None;
+    }
+
+    fn log(&mut self, colors: &mut [Rwu32]) {
+        write!(self.color_file, "{}", self.steps).expect("steps write");
+        for c in colors {
+            let c = c.mut_read();
+            write!(self.color_file, " {}", c).expect("add color");
+        }
+        writeln!(self.color_file, "").expect("write newline");
+        writeln!(self.time_file, "{}", self.elapsed_seconds).expect("write seconds");
+    }
+}
+
+struct SamplerThreadState {
+    rng: Lcg64Xsh32,
+    viable_colors: DiscreteSampler,
+}
+
+impl SamplerThreadState {
+    fn new(idx: usize, ncolors: u32) -> Self {
+        let rng = Lcg64Xsh32::new(0xcafef00dd15ea5e5, idx.try_into().unwrap());
+        let viable_colors = DiscreteSampler::new(ncolors);
+        Self { rng, viable_colors }
     }
 }
