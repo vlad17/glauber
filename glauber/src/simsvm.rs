@@ -3,7 +3,7 @@
 //! <target> <feature> <feature>...
 //! where target and features should be contiguous non-negative integers.
 
-use std::convert::TryInto;
+
 
 use rayon::iter::ParallelIterator;
 

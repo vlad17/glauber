@@ -1,15 +1,15 @@
 //! Simple graph format reader.
 
-use std::convert::TryInto;
-use std::fs::File;
-use std::io::BufWriter;
-use std::io::Write;
+
+
+
+
 use std::iter;
-use std::path::PathBuf;
+
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::time::Instant;
 
-use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_json::json;
 
 use crate::{graph::Graph, simsvm, Scanner};

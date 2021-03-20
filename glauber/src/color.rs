@@ -298,9 +298,9 @@ struct GlauberLogger {
 impl GlauberLogger {
     fn new(out_colors: &Path, out_times: &Path) -> Self {
         let file = File::create(out_colors).expect("write file");
-        let mut color_file = BufWriter::new(file);
+        let color_file = BufWriter::new(file);
         let file = File::create(out_times).expect("write file");
-        let mut time_file = BufWriter::new(file);
+        let time_file = BufWriter::new(file);
         Self {
             steps: 0,
             elapsed_seconds: 0.0,

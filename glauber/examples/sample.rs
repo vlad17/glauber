@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::BufWriter;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Write};
 use std::path::PathBuf;
 use std::time::Instant;
 use std::u32;
@@ -16,7 +16,7 @@ use rayon::iter::ParallelIterator;
 use serde_json::json;
 use structopt::StructOpt;
 
-use glauber::{color, graphio, simsvm, Scanner, SummaryStats};
+
 
 /// Generate a connected simple graph with the provided average degree.
 #[derive(Debug, StructOpt)]
@@ -48,7 +48,7 @@ fn main() {
 
     // To start with, our graph includes edges from vertex
     // i to i+1 for all i to ensure that it's connected.
-    let mut edges: HashSet<Edge> = (1..n)
+    let edges: HashSet<Edge> = (1..n)
         .map(|v| {
             let v: u32 = v.try_into().unwrap();
             fromtup(v - 1, v)

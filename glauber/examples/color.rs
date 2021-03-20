@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+
+
 use std::path::PathBuf;
 use std::time::Instant;
 use std::u32;
@@ -14,7 +14,7 @@ use serde_json::json;
 use structopt::StructOpt;
 
 use glauber::graph::Graph;
-use glauber::{color, graphio, simsvm, Scanner, SummaryStats};
+use glauber::{color, graphio, Scanner, SummaryStats};
 
 /// Reads simplified graph format files.
 ///
