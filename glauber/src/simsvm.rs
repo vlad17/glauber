@@ -3,10 +3,6 @@
 //! <target> <feature> <feature>...
 //! where target and features should be contiguous non-negative integers.
 
-
-
-use rayon::iter::ParallelIterator;
-
 use crate::scanner::DelimIter;
 
 /// Given a [`DelimIter`] pointing to the front of a line in a
