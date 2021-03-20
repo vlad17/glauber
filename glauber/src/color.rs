@@ -112,7 +112,9 @@ pub fn greedy(graph: &Graph) -> (u32, Vec<u32>) {
     (ncolors as u32, colors)
 }
 
-/// Return Glauber coloring after this many samples.
+/// Return Glauber coloring after this many samples, as well as the time that
+/// it took to get to each extra `frequency` number of sampling steps.
+///
 /// Log out the intermediate colorings every `frequency` samples, along with the elapsed time.
 pub fn glauber(
     graph: &Graph,
@@ -195,6 +197,8 @@ pub fn glauber(
             "conflicts": conflicts,
             "nthreads": nthreads,
             "conflict_percent": 100.0 * conflicts as f64 / (nsamples + conflicts) as f64,
+            "steps": logger.steps_history,
+            "times": logger.times_history,
         })
     );
 
@@ -294,6 +298,8 @@ struct GlauberLogger {
     start_time: Option<Instant>,
     time_file: BufWriter<File>,
     color_file: BufWriter<File>,
+    steps_history: Vec<u64>,
+    times_history: Vec<f64>,
 }
 
 impl GlauberLogger {
@@ -308,6 +314,8 @@ impl GlauberLogger {
             start_time: None,
             time_file,
             color_file,
+            steps_history: Vec::new(),
+            times_history: Vec::new(),
         }
     }
 
@@ -326,12 +334,14 @@ impl GlauberLogger {
 
     fn log(&mut self, colors: &mut [Rwu32]) {
         write!(self.color_file, "{}", self.steps).expect("steps write");
+        self.steps_history.push(self.steps);
         for c in colors {
             let c = c.mut_read();
             write!(self.color_file, " {}", c).expect("add color");
         }
         writeln!(self.color_file, "").expect("write newline");
         writeln!(self.time_file, "{}", self.elapsed_seconds).expect("write seconds");
+        self.times_history.push(self.elapsed_seconds);
     }
 }
 
