@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-
 use std::path::PathBuf;
 use std::time::Instant;
 use std::u32;
@@ -59,6 +58,10 @@ struct Opt {
     /// Out file for the time elapsed at each sample.
     #[structopt(long)]
     out_times: PathBuf,
+
+    /// Random seed
+    #[structopt(long)]
+    seed: usize,
 }
 
 fn main() {
@@ -100,6 +103,7 @@ fn main() {
         opt.frequency,
         &opt.out,
         &opt.out_times,
+        opt.seed,
     );
     let remap = color::remap(ncolors, &colors);
     println!(

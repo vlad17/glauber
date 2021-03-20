@@ -121,6 +121,7 @@ pub fn glauber(
     frequency: usize,
     out: &Path,
     out_times: &Path,
+    seed: usize,
 ) -> Vec<u32> {
     let (greedy_ncolors, colors) = greedy(graph);
     assert!(
@@ -146,7 +147,7 @@ pub fn glauber(
     let mut conflicts: usize = 0;
     let mut samples_left_this_round = AtomicI64::new(0);
     let mut thread_states: Vec<_> = (0..nthreads)
-        .map(|i| SamplerThreadState::new(i, ncolors))
+        .map(|i| SamplerThreadState::new(seed * nthreads + i, ncolors))
         .collect();
     while logger.steps < nsamples.try_into().unwrap() {
         let samples_to_sample = frequency.min(nsamples - logger.steps as usize);
